@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # ClickHouse Database
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: debridge-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    environment:
+      - CLICKHOUSE_DB=debridge
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Temporal Server (for workflow orchestration)
+  temporal:
+    image: temporalio/auto-setup:1.24
+    container_name: debridge-temporal
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=sqlite
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      - clickhouse
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    container_name: debridge-temporal-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      - temporal
+
+  # Pipeline Worker (processes Temporal workflows)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: debridge-worker
+    command: ["node", "dist/temporal/worker.js"]
+    environment:
+      - ETH_RPC_URL=${ETH_RPC_URL}
+      - TARGET_ADDRESS=0xef4fb24ad0916217251f553c0596f8edc630eb66
+      - USDC_CONTRACT=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DATABASE=debridge
+      - TEMPORAL_ADDRESS=temporal:7233
+      - MIN_EVENTS=5000
+      - LOG_LEVEL=info
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  # Standalone pipeline (alternative to Temporal-based execution)
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: debridge-pipeline
+    command: ["node", "dist/commands/pipeline.js"]
+    environment:
+      - ETH_RPC_URL=${ETH_RPC_URL}
+      - TARGET_ADDRESS=0xef4fb24ad0916217251f553c0596f8edc630eb66
+      - USDC_CONTRACT=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DATABASE=debridge
+      - MIN_EVENTS=5000
+      - LOG_LEVEL=info
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    profiles:
+      - pipeline
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
+
+networks:
+  default:
+    name: debridge-network

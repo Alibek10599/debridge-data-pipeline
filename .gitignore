@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+
+# Output (keep the folder structure)
+output/*
+!output/.gitkeep
+
+# ClickHouse data
+clickhouse-data/
+clickhouse-logs/
+
+# Temporal
+temporal-data/
