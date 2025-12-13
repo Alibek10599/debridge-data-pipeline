@@ -1,13 +1,29 @@
-version: '3.8'
-
 services:
+  # PostgreSQL for Temporal (with proper permissions)
+  postgres:
+    image: postgres:16-alpine
+    container_name: debridge-postgres
+    user: postgres
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_DB=temporal
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   # ClickHouse Database
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
     container_name: debridge-clickhouse
     ports:
       - "8123:8123"
-      - "9000:9000"
+      - "9001:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
@@ -20,22 +36,34 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
-  # Temporal Server (for workflow orchestration)
+  # Temporal Server
   temporal:
     image: temporalio/auto-setup:1.24
     container_name: debridge-temporal
     ports:
       - "7233:7233"
     environment:
-      - DB=sqlite
+      - DB=postgres12
+      - POSTGRES_SEEDS=postgres
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - TEMPORAL_ADDRESS=0.0.0.0:7233
     depends_on:
-      - clickhouse
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "tctl", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # Temporal Web UI
   temporal-ui:
@@ -47,9 +75,10 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CORS_ORIGINS=http://localhost:3000
     depends_on:
-      - temporal
+      temporal:
+        condition: service_healthy
 
-  # Pipeline Worker (processes Temporal workflows)
+  # Pipeline Worker
   worker:
     build:
       context: .
@@ -70,10 +99,10 @@ services:
       clickhouse:
         condition: service_healthy
       temporal:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
-  # Standalone pipeline (alternative to Temporal-based execution)
+  # Standalone pipeline
   pipeline:
     build:
       context: .
@@ -100,6 +129,7 @@ services:
 volumes:
   clickhouse-data:
   clickhouse-logs:
+  postgres-data:
 
 networks:
   default:
