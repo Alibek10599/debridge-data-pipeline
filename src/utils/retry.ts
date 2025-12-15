@@ -32,6 +32,8 @@ function calculateDelay(attempt: number, options: RetryOptions): number {
 function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
+    const errorString = JSON.stringify(error).toLowerCase();
+
     // Rate limit errors
     if (message.includes('rate limit') || message.includes('429')) {
       return true;
@@ -45,6 +47,16 @@ function isRetryableError(error: unknown): boolean {
     if (message.includes('500') || message.includes('502') ||
         message.includes('503') || message.includes('504')) {
       return true;
+    }
+    // Infura: "query returned more than 10000 results" (error -32005)
+    // This is NOT retryable - caller should reduce block range
+    if (errorString.includes('10000 results') || errorString.includes('-32005')) {
+      return false;
+    }
+    // Alchemy: block range errors (error -32600)
+    // This is NOT retryable - caller should reduce block range
+    if (errorString.includes('block range') || errorString.includes('-32600')) {
+      return false;
     }
   }
   return false;

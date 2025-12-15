@@ -11,12 +11,13 @@ let client: ClickHouseClient | null = null;
  */
 export function getClickHouseClient(): ClickHouseClient {
   if (!client) {
+    const url = `http://${config.clickhouse.host}:${config.clickhouse.port}`;
     logger.info(
-      { host: config.clickhouse.host, database: config.clickhouse.database },
+      { url, database: config.clickhouse.database },
       'Initializing ClickHouse client'
     );
     client = createClient({
-      host: `http://${config.clickhouse.host}:${config.clickhouse.port}`,
+      url,
       database: config.clickhouse.database,
       username: config.clickhouse.user,
       password: config.clickhouse.password,

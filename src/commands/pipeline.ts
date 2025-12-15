@@ -96,9 +96,9 @@ async function runPipeline() {
       }
       
       currentBlockNum = rangeEnd + 1n;
-      
-      // Small delay to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Delay to respect rate limits (Infura free tier: 500 credits/sec)
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     logger.info({ totalEvents }, 'Event collection completed');

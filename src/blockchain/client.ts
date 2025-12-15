@@ -2,6 +2,7 @@ import { createPublicClient, http, PublicClient, Block } from 'viem';
 import { mainnet } from 'viem/chains';
 import { config } from '../config';
 import { createChildLogger } from '../utils/logger';
+import { withRetry } from '../utils/retry';
 
 const logger = createChildLogger('blockchain-client');
 
@@ -29,7 +30,11 @@ export function getClient(): PublicClient {
  */
 export async function getCurrentBlockNumber(): Promise<bigint> {
   const client = getClient();
-  return client.getBlockNumber();
+  return withRetry(() => client.getBlockNumber(), {
+    maxRetries: 5,
+    initialDelayMs: 2000,
+    maxDelayMs: 10000,
+  });
 }
 
 /**
@@ -37,7 +42,11 @@ export async function getCurrentBlockNumber(): Promise<bigint> {
  */
 export async function getBlock(blockNumber: bigint): Promise<Block> {
   const client = getClient();
-  return client.getBlock({ blockNumber });
+  return withRetry(() => client.getBlock({ blockNumber }), {
+    maxRetries: 3,
+    initialDelayMs: 1000,
+    maxDelayMs: 5000,
+  });
 }
 
 /**
@@ -46,9 +55,9 @@ export async function getBlock(blockNumber: bigint): Promise<Block> {
 export async function getBlocks(blockNumbers: bigint[]): Promise<Map<bigint, Block>> {
   const client = getClient();
   const blocks = new Map<bigint, Block>();
-  
-  // Batch requests for efficiency
-  const batchSize = 10;
+
+  // Batch requests with delay to avoid rate limits
+  const batchSize = 5; // Reduced batch size for rate limit compliance
   for (let i = 0; i < blockNumbers.length; i += batchSize) {
     const batch = blockNumbers.slice(i, i + batchSize);
     const results = await Promise.all(
@@ -57,8 +66,13 @@ export async function getBlocks(blockNumbers: bigint[]): Promise<Map<bigint, Blo
     results.forEach((block, idx) => {
       blocks.set(batch[idx], block);
     });
+
+    // Add delay between batches to respect rate limits
+    if (i + batchSize < blockNumbers.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
   }
-  
+
   return blocks;
 }
 
@@ -75,18 +89,23 @@ export async function getTransactionReceipt(txHash: `0x${string}`) {
  */
 export async function getTransactionReceipts(txHashes: `0x${string}`[]) {
   const client = getClient();
-  
-  // Batch for efficiency
-  const batchSize = 20;
+
+  // Batch with rate limit compliance
+  const batchSize = 10; // Reduced batch size
   const receipts = [];
-  
+
   for (let i = 0; i < txHashes.length; i += batchSize) {
     const batch = txHashes.slice(i, i + batchSize);
     const results = await Promise.all(
       batch.map(hash => client.getTransactionReceipt({ hash }))
     );
     receipts.push(...results);
+
+    // Add delay between batches to respect rate limits
+    if (i + batchSize < txHashes.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
   }
-  
+
   return receipts;
 }

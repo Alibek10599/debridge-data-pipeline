@@ -46,7 +46,9 @@ This pipeline collects and analyzes USDC transfer events for a specific address,
 
 - Node.js >= 18.0.0
 - Docker and Docker Compose (for containerized deployment)
-- Ethereum RPC endpoint (Alchemy, Infura, QuickNode, etc.)
+- Ethereum RPC endpoint:
+  - **Recommended**: [Infura](https://infura.io/) (free tier: no block range limits)
+  - Alternative: Alchemy, QuickNode (note: Alchemy free tier has 10 block range limit)
 
 ## Quick Start
 
@@ -66,8 +68,15 @@ cp .env.example .env
 
 Edit `.env` with your configuration:
 
+**For Infura (Recommended):**
+```env
+ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_PROJECT_ID
+```
+
+**For Alchemy (requires paid plan or set BLOCK_BATCH_SIZE=10):**
 ```env
 ETH_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+BLOCK_BATCH_SIZE=10  # Required for Alchemy free tier
 ```
 
 ### 3. Run with Docker (Recommended)
@@ -247,17 +256,37 @@ npm test           # Unit tests
 
 ## Troubleshooting
 
+### Block Range Errors
+
+**Alchemy Error: "10 block range limit"**
+```
+Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range
+```
+- **Solution 1 (Recommended)**: Switch to Infura (no block range limit on free tier)
+- **Solution 2**: Set `BLOCK_BATCH_SIZE=10` in `.env` (slower collection)
+- **Solution 3**: Upgrade to Alchemy paid plan
+
+**Infura Error: "query returned more than 10000 results"**
+```
+query returned more than 10000 results. Try with this block range [...]
+```
+- Reduce `BLOCK_BATCH_SIZE` to a smaller value (e.g., 1000 or 500)
+- This error is rare for address-specific queries
+
 ### Rate Limit Errors
-- Reduce `BLOCK_BATCH_SIZE`
-- Use a paid RPC tier with higher limits
+- Increase delays between batches in `src/commands/pipeline.ts:101`
+- Check your RPC provider's rate limit tier
+- Consider upgrading to a paid plan
 
 ### Connection Timeout
 - Check RPC endpoint health
-- Increase timeout in configuration
+- Increase timeout in `src/blockchain/client.ts:20`
+- Try a different RPC provider
 
 ### Missing Events
-- Verify target address has USDC activity
+- Verify target address has USDC activity on Etherscan
 - Check block range covers expected period
+- Ensure `TARGET_ADDRESS` is correctly configured
 
 ## License
 

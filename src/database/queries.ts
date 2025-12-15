@@ -17,18 +17,24 @@ export async function insertTransferEvents(
   
   const client = getClickHouseClient();
   
-  const rows = events.map(event => ({
-    transaction_hash: event.transactionHash,
-    log_index: event.logIndex,
-    block_number: Number(event.blockNumber),
-    block_timestamp: new Date(event.blockTimestamp * 1000),
-    from_address: event.from.toLowerCase(),
-    to_address: event.to.toLowerCase(),
-    value: event.value.toString(),
-    gas_used: Number(event.gasUsed),
-    effective_gas_price: event.effectiveGasPrice.toString(),
-    gas_cost: event.gasCost.toString(),
-  }));
+  const rows = events.map(event => {
+    // Format timestamp as YYYY-MM-DD HH:MM:SS for ClickHouse DateTime
+    const date = new Date(event.blockTimestamp * 1000);
+    const timestamp = date.toISOString().slice(0, 19).replace('T', ' ');
+
+    return {
+      transaction_hash: event.transactionHash,
+      log_index: event.logIndex,
+      block_number: Number(event.blockNumber),
+      block_timestamp: timestamp,
+      from_address: event.from.toLowerCase(),
+      to_address: event.to.toLowerCase(),
+      value: event.value.toString(),
+      gas_used: Number(event.gasUsed),
+      effective_gas_price: event.effectiveGasPrice.toString(),
+      gas_cost: event.gasCost.toString(),
+    };
+  });
   
   await client.insert({
     table: 'transfer_events',
