@@ -48,29 +48,6 @@ export async function createTransferEventsTable(): Promise<void> {
   logger.info('transfer_events table created/verified');
 }
 
-/**
- * Create daily_gas_metrics materialized view for pre-aggregated daily stats
- */
-export async function createDailyGasMetricsView(): Promise<void> {
-  const client = getClickHouseClient();
-  
-  // Create target table for materialized view
-  const tableQuery = `
-    CREATE TABLE IF NOT EXISTS daily_gas_metrics (
-      event_date Date,
-      transaction_count UInt64,
-      total_gas_used UInt64,
-      total_gas_cost UInt256,
-      avg_effective_gas_price Float64
-    )
-    ENGINE = SummingMergeTree()
-    PARTITION BY toYYYYMM(event_date)
-    ORDER BY event_date
-  `;
-  
-  await client.command({ query: tableQuery });
-  logger.info('daily_gas_metrics table created/verified');
-}
 
 /**
  * Create indexes for efficient querying
@@ -125,11 +102,10 @@ export async function createIndexes(): Promise<void> {
  */
 export async function initializeSchema(): Promise<void> {
   logger.info('Initializing database schema...');
-  
+
   await createDatabase();
   await createTransferEventsTable();
-  await createDailyGasMetricsView();
   await createIndexes();
-  
+
   logger.info('Schema initialization complete');
 }
