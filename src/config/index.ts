@@ -59,6 +59,9 @@ export const config = {
 
   // Collection settings
   collection: {
+    targetAddress: requireAddress('TARGET_ADDRESS'),
+    contractAddress: requireAddress('USDC_CONTRACT'),
+    minEvents: optionalInt('MIN_EVENTS', 5000),
     blockBatchSize: optionalInt('BLOCK_BATCH_SIZE', 2000),
     maxRetries: optionalInt('MAX_RETRIES', 5),
     initialRetryDelayMs: optionalInt('INITIAL_RETRY_DELAY_MS', 1000),

@@ -2,13 +2,6 @@ import { register } from 'prom-client';
 import { createChildLogger } from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
-import {
-  rpcLatency,
-  rateLimitHits,
-  retriesTotal,
-  eventsCollected,
-  blocksProcessed,
-} from './metrics';
 
 const logger = createChildLogger('metrics-summary');
 

@@ -1,19 +1,14 @@
-import { Address, Log, parseAbiItem, decodeEventLog, keccak256, toHex } from 'viem';
-import { getClient, getBlock, getTransactionReceipt } from './client';
+import { Address, Log, parseAbiItem, decodeEventLog } from 'viem';
+import { getClient, getTransactionReceipt } from './client';
 import { config } from '../config';
 import { withRetry } from '../utils/retry';
-import { createChildLogger } from '../utils/logger';
 import { rpcLatency, timeOperation, eventsCollected } from '../monitoring/metrics';
-
-const logger = createChildLogger('events');
 
 // ERC-20 Transfer event ABI
 const TRANSFER_EVENT = parseAbiItem(
   'event Transfer(address indexed from, address indexed to, uint256 value)'
 );
 
-// Transfer event signature hash
-const TRANSFER_TOPIC = keccak256(toHex('Transfer(address,address,uint256)'));
 
 export interface TransferEvent {
   transactionHash: `0x${string}`;
