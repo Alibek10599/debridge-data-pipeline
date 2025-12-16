@@ -5,16 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
     "start:worker": "node dist/temporal/worker.js",
-    "dev": "ts-node src/index.ts",
+    "start:workflow": "ts-node src/commands/start-workflow.ts",
     "dev:worker": "ts-node src/temporal/worker.ts",
-    "collect": "ts-node src/commands/collect.ts",
-    "analyze": "ts-node src/commands/analyze.ts",
-    "export": "ts-node src/commands/export.ts",
-    "pipeline": "ts-node src/commands/pipeline.ts",
-    "validate": "ts-node src/commands/validate.ts",
-    "metrics": "ts-node src/monitoring/server.ts",
+    "dev:workflow": "ts-node src/commands/start-workflow.ts",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit"
@@ -38,7 +32,7 @@
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
     "prom-client": "^15.1.3",
-    "viem": "^2.17.0"
+    "viem": "^2.42.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

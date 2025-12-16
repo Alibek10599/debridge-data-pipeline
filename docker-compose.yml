@@ -83,6 +83,7 @@ services:
 
   # Pipeline Worker
   worker:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
@@ -108,13 +109,14 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # Standalone pipeline
-  pipeline:
+  # Workflow starter (triggers Temporal workflow)
+  starter:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: debridge-pipeline
-    command: ["node", "dist/commands/pipeline.js"]
+    container_name: debridge-starter
+    command: ["node", "dist/commands/start-workflow.js"]
     environment:
       - ETH_RPC_URL=${ETH_RPC_URL}
       - TARGET_ADDRESS=0xef4fb24ad0916217251f553c0596f8edc630eb66
@@ -122,15 +124,16 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
       - CLICKHOUSE_DATABASE=debridge
+      - TEMPORAL_ADDRESS=temporal:7233
       - MIN_EVENTS=5000
       - LOG_LEVEL=info
     volumes:
       - ./output:/app/output
     depends_on:
-      clickhouse:
-        condition: service_healthy
-    profiles:
-      - pipeline
+      temporal:
+        condition: service_started
+      worker:
+        condition: service_started
 
 volumes:
   clickhouse-data:

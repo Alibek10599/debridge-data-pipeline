@@ -1,6 +1,6 @@
 # deBridge Data Pipeline
 
-A robust blockchain data collection and analysis pipeline for USDC transfer events on Ethereum Mainnet.
+A robust blockchain data collection and analysis pipeline for USDC transfer events on Ethereum Mainnet, orchestrated with Temporal workflows.
 
 ## Overview
 
@@ -9,28 +9,35 @@ This pipeline collects and analyzes USDC transfer events for a specific address,
 - **Daily Total Gas Cost** aggregation
 - **Cumulative Gas Cost** over time
 
+The pipeline uses **Temporal** for reliable workflow orchestration with automatic retries, resumability, and comprehensive observability.
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Data Pipeline                             │
+│                   Temporal Workflow Pipeline                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐    │
 │  │   Ethereum   │────▶│   Temporal   │────▶│  ClickHouse  │    │
 │  │   JSON-RPC   │     │   Workflow   │     │   Database   │    │
-│  └──────────────┘     └──────────────┘     └──────────────┘    │
-│         │                    │                    │             │
-│         │                    │                    ▼             │
-│         │                    │           ┌──────────────┐       │
-│         │                    │           │   Analysis   │       │
-│         │                    │           │    Engine    │       │
-│         └────────────────────┘           └──────┬───────┘       │
-│                                                  │              │
-│                                                  ▼              │
-│                                          ┌──────────────┐       │
-│                                          │  JSON Export │       │
-│                                          └──────────────┘       │
+│  └──────────────┘     │              │     └──────────────┘    │
+│         │             │   Activities  │            │           │
+│         │             │   + Worker    │            ▼           │
+│         │             └──────────────┘    ┌──────────────┐     │
+│         │                    │            │   Analysis   │     │
+│         │                    │            │    Engine    │     │
+│         │                    ▼            └──────┬───────┘     │
+│         │            ┌──────────────┐            │             │
+│         │            │   Temporal   │            ▼             │
+│         │            │      UI      │    ┌──────────────┐      │
+│         │            └──────────────┘    │ JSON Reports │      │
+│         │                    │           └──────────────┘      │
+│         │                    ▼                                 │
+│         │            ┌──────────────┐                          │
+│         └───────────▶│  Prometheus  │                          │
+│                      │   Metrics    │                          │
+│                      └──────────────┘                          │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -39,8 +46,11 @@ This pipeline collects and analyzes USDC transfer events for a specific address,
 
 1. **Blockchain Client (viem)**: Connects to Ethereum RPC for fetching transfer events and transaction receipts
 2. **Temporal Workflows**: Orchestrates data collection with retry logic, heartbeats, and resumability
-3. **ClickHouse Database**: Time-series optimized storage with MergeTree engine and partitioning
-4. **Analysis Engine**: Calculates gas metrics using SQL window functions
+3. **Temporal Worker**: Executes workflow activities, exposes Prometheus metrics
+4. **ClickHouse Database**: Time-series optimized storage with MergeTree engine and partitioning
+5. **Analysis Engine**: Calculates gas metrics using SQL window functions
+6. **Temporal UI**: Web interface for monitoring workflow execution
+7. **Prometheus Metrics**: Real-time observability into pipeline health and performance
 
 ## Prerequisites
 
@@ -52,7 +62,7 @@ This pipeline collects and analyzes USDC transfer events for a specific address,
 
 ## Quick Start
 
-### 1. Clone and Install
+### 1. Clone and Configure
 
 ```bash
 git clone <repository-url>
@@ -60,89 +70,167 @@ cd debridge-data-pipeline
 npm install
 ```
 
-### 2. Configure Environment
-
+Create `.env` file:
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your configuration:
+Edit `.env` with your Ethereum RPC URL:
 
-**For PublicNode (Recommended - No API key needed):**
+**PublicNode (Recommended - No API key needed):**
 ```env
 ETH_RPC_URL=https://ethereum.publicnode.com
-BLOCK_BATCH_SIZE=2000
 ```
 
-**Alternative Options:**
+**Alternative Providers:**
+- Infura: `https://mainnet.infura.io/v3/YOUR_PROJECT_ID`
+- Alchemy: `https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY`
+- LlamaRPC: `https://eth.llamarpc.com`
 
-*Infura (requires free account):*
-```env
-ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_PROJECT_ID
-BLOCK_BATCH_SIZE=2000
-```
-
-*Alchemy (free tier very limited):*
-```env
-ETH_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
-BLOCK_BATCH_SIZE=10  # Free tier requires small batches
-```
-
-### 3. Run with Docker (Recommended)
+### 2. Start Infrastructure
 
 ```bash
-# Start infrastructure (ClickHouse, Temporal)
-docker-compose up -d clickhouse temporal temporal-ui
+# Start all services (MySQL, ClickHouse, Temporal, Worker)
+docker compose up -d
 
-# Wait for services to be ready (~30 seconds)
-sleep 30
-
-# Run the standalone pipeline
-docker-compose --profile pipeline up pipeline
+# Wait for services to be healthy (~60 seconds)
+docker compose ps
 ```
 
-### 4. Run Locally (Development)
+All services should show as "healthy" or "running":
+- `debridge-mysql` - Temporal persistence
+- `debridge-clickhouse` - Data storage
+- `debridge-temporal` - Workflow server
+- `debridge-temporal-ui` - Web UI
+- `debridge-worker` - Workflow executor
+
+### 3. Trigger Workflow
 
 ```bash
-# Start ClickHouse only
-docker-compose up -d clickhouse
+# Start the data collection workflow
+docker compose up starter
 
-# Validate setup before running
-npm run validate
-
-# Run standalone pipeline
-npm run pipeline
+# Or run locally:
+npm run start:workflow
 ```
 
-## Usage
+The workflow will:
+1. Collect 5,000+ USDC transfer events
+2. Calculate gas metrics (MA7, daily totals, cumulative)
+3. Export analysis report to `./output/analysis_report.json`
 
-### Standalone Pipeline (Recommended for Testing)
+## Monitoring the Pipeline
 
-The standalone pipeline runs without Temporal and is simpler for local testing:
+### 1. Temporal Web UI
+
+**URL:** http://localhost:8080
+
+Monitor workflow execution in real-time:
+- Workflow status (Running, Completed, Failed)
+- Activity progress and retries
+- Execution history and timeline
+- Event logs and error details
+
+Navigate to: **Workflows** → Find your `collect-events-*` workflow
+
+### 2. Prometheus Metrics
+
+**Metrics Endpoint:** http://localhost:9091/metrics
+**Health Check:** http://localhost:9091/health
+
+The worker exposes comprehensive Prometheus metrics:
+
+#### Available Metrics
+
+**RPC Performance:**
+- `debridge_rpc_request_duration_seconds{method}` - Histogram of RPC latency by method
+  - Labels: `method` (eth_getLogs, eth_getTransactionReceipt, etc.)
+  - Buckets: 0.1s, 0.5s, 1s, 2s, 5s, 10s
+
+**Rate Limiting:**
+- `debridge_rate_limit_hits_total` - Counter of rate limit errors encountered
+- `debridge_retries_total{reason}` - Counter of retry attempts by reason
+
+**Data Collection:**
+- `debridge_events_collected_total` - Total USDC transfer events collected
+- `debridge_blocks_processed_total` - Total Ethereum blocks scanned
+
+**Database Operations:**
+- `debridge_db_operations_total{operation}` - Database calls by type (insert, query)
+- `debridge_db_operation_duration_seconds{operation}` - Database operation latency
+
+**Pipeline Progress:**
+- `debridge_pipeline_progress` - Gauge of completion (0.0 to 1.0)
+- `debridge_current_block_number` - Current block being processed
+
+**Node.js Metrics:**
+- `process_cpu_user_seconds_total` - CPU usage
+- `nodejs_heap_size_used_bytes` - Memory usage
+- `nodejs_eventloop_lag_seconds` - Event loop lag
+
+#### Example Prometheus Queries
+
+```promql
+# Average RPC latency over last 5m
+rate(debridge_rpc_request_duration_seconds_sum[5m]) /
+rate(debridge_rpc_request_duration_seconds_count[5m])
+
+# Events collected per minute
+rate(debridge_events_collected_total[1m]) * 60
+
+# Pipeline completion percentage
+debridge_pipeline_progress * 100
+
+# P95 RPC latency by method
+histogram_quantile(0.95,
+  rate(debridge_rpc_request_duration_seconds_bucket[5m]))
+```
+
+#### Prometheus Scrape Configuration
+
+Add to your `prometheus.yml`:
+```yaml
+scrape_configs:
+  - job_name: 'debridge-pipeline'
+    static_configs:
+      - targets: ['localhost:9091']
+    scrape_interval: 15s
+```
+
+### 3. ClickHouse Query Interface
+
+**HTTP Interface:** http://localhost:8123
+**Native Protocol:** localhost:9001
+
+Query collected data directly:
 
 ```bash
-npm run pipeline
+# Using curl
+curl 'http://localhost:8123/' --data-binary \
+  "SELECT count() FROM debridge.transfer_events"
+
+# Using clickhouse-client (if installed)
+clickhouse-client --host localhost --port 9001 \
+  --query "SELECT * FROM debridge.transfer_events LIMIT 10"
 ```
 
-### Temporal-Based Pipeline (Production)
+### 4. Worker Health Check
 
-For production deployments with workflow orchestration:
+**Endpoint:** http://localhost:9091/health
 
-```bash
-# Terminal 1: Start worker
-npm run dev:worker
-
-# Terminal 2: Start collection
-npm run collect
+Returns JSON with service status:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-06-20T10:30:00.000Z",
+  "uptime": 3600.5,
+  "metrics": {
+    "eventsCollected": 5072,
+    "blocksProcessed": 581888,
+    "rpcCalls": 150
+  }
+}
 ```
-
-### Export Analysis Report
-
-```bash
-npm run export [output_path]
-```
-
-Default output: `./output/analysis_report.json`
 
 ## Output Format
 
@@ -251,70 +339,6 @@ debridge-data-pipeline/
 └── README.md
 ```
 
-## Monitoring
-
-### Temporal UI
-
-Access Temporal UI at http://localhost:8080 to monitor workflow execution.
-
-### Prometheus Metrics
-
-The project provides two monitoring approaches depending on execution mode:
-
-#### Standalone Pipeline (Short-lived)
-
-When running `npm run pipeline`, metrics are **collected and displayed at completion**:
-
-```bash
-npm run pipeline
-
-# At end of pipeline run:
-# 📊 METRICS SUMMARY
-# ==================
-# 🌐 RPC Calls: 150 total, 245ms avg latency
-# 📦 Events: 5,072 collected
-# ⛓️  Blocks: 581,888 processed
-```
-
-**Output Files:**
-- `output/analysis_report.json` - Analysis results (MA7, gas costs, etc.)
-- `output/metrics.json` - Prometheus metrics summary + raw data
-
-**No live metrics server** - pipeline runs for ~3 minutes and exits with summary.
-
-#### Temporal Worker (Long-running)
-
-When running `npm run dev:worker`, metrics are **exposed via HTTP endpoint**:
-
-**Metrics Endpoints:**
-- `http://localhost:9091/metrics` - Prometheus scrape endpoint
-- `http://localhost:9091/health` - Health check JSON
-
-**Available Metrics:**
-- `debridge_rpc_request_duration_seconds` - RPC request latency by method
-- `debridge_rate_limit_hits_total` - Total rate limit errors encountered
-- `debridge_retries_total` - Total retry attempts by reason
-- `debridge_events_collected_total` - Total events collected
-- `debridge_blocks_processed_total` - Total blocks processed
-- `debridge_db_operations_total` - Database operations by type
-- `debridge_pipeline_progress` - Current pipeline progress (0-1)
-- `debridge_current_block_number` - Current block being processed
-- Plus default Node.js metrics (CPU, memory, event loop lag)
-
-**Prometheus Scrape Config:**
-```yaml
-scrape_configs:
-  - job_name: 'debridge-worker'
-    static_configs:
-      - targets: ['localhost:9091']
-    scrape_interval: 15s
-```
-
-**Standalone Metrics Server** (for testing):
-```bash
-npm run metrics
-# Exposes metrics at http://localhost:9090/metrics
-```
 
 ## Testing
 
