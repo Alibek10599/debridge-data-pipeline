@@ -42,13 +42,13 @@ export async function getStartingBlock(): Promise<string> {
     return nextBlock.toString();
   }
   
-  // Start from a reasonable historical block for USDC
-  // We'll start scanning from ~2 years back for comprehensive coverage
+  // Start from recent historical data (last 30 days)
+  // This collects recent USDC transfer events for the target address
   const currentBlock = await getCurrentBlockNumber();
-  const blocksPerYear = BigInt(365 * 24 * 60 * 60 / 12); // ~2.6M blocks per year
-  const startBlock = currentBlock - (blocksPerYear * 2n);
-  
-  logger.info({ startBlock: startBlock.toString() }, 'Starting fresh collection');
+  const blocksPerDay = BigInt(24 * 60 * 60 / 12); // ~7,200 blocks per day (12s block time)
+  const startBlock = currentBlock - (blocksPerDay * 30n); // Last 30 days
+
+  logger.info({ startBlock: startBlock.toString() }, 'Starting fresh collection from last 30 days');
   return startBlock.toString();
 }
 
