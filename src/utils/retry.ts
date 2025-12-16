@@ -1,4 +1,5 @@
 import { createChildLogger } from './logger';
+import { retriesTotal, rateLimitHits } from '../monitoring/metrics';
 
 const logger = createChildLogger('retry');
 
@@ -36,6 +37,8 @@ function isRetryableError(error: unknown): boolean {
 
     // Rate limit errors
     if (message.includes('rate limit') || message.includes('429')) {
+      // Track rate limit hits
+      rateLimitHits.inc({ provider: 'unknown' });
       return true;
     }
     // Network errors
@@ -80,12 +83,20 @@ export async function withRetry<T>(
 
   for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
     try {
-      return await fn();
+      const result = await fn();
+
+      // Track successful retry if this wasn't the first attempt
+      if (attempt > 0) {
+        retriesTotal.inc({ reason: 'retry_succeeded', success: 'true' });
+      }
+
+      return result;
     } catch (error) {
       lastError = error;
 
       if (attempt === opts.maxRetries) {
         logger.error({ error, attempt }, 'Max retries exceeded');
+        retriesTotal.inc({ reason: 'max_retries_exceeded', success: 'false' });
         throw error;
       }
 
@@ -93,6 +104,12 @@ export async function withRetry<T>(
         logger.error({ error }, 'Non-retryable error encountered');
         throw error;
       }
+
+      // Track retry attempt
+      const reason = error instanceof Error && error.message.includes('rate limit')
+        ? 'rate_limit'
+        : 'network_error';
+      retriesTotal.inc({ reason, success: 'false' });
 
       const delay = calculateDelay(attempt, opts);
       logger.warn(

@@ -1,22 +1,24 @@
 import path from 'path';
 import { config } from '../config';
 import { initializeSchema } from '../database/schema';
-import { 
-  insertTransferEvents, 
-  getEventCount, 
+import {
+  insertTransferEvents,
+  getEventCount,
   getLastProcessedBlock,
   getBlockRange,
-  getDateRange 
+  getDateRange
 } from '../database/queries';
 import { closeClickHouse } from '../database/clickhouse';
-import { 
-  fetchTransferEvents, 
-  processEventsBatch, 
-  getUniqueBlockNumbers 
+import {
+  fetchTransferEvents,
+  processEventsBatch,
+  getUniqueBlockNumbers
 } from '../blockchain/events';
 import { getCurrentBlockNumber, getBlocks } from '../blockchain/client';
 import { exportReportToJson } from '../analysis/metrics';
 import { createChildLogger } from '../utils/logger';
+import { pipelineProgress, currentBlockNumber, blocksProcessed } from '../monitoring/metrics';
+import { logMetricsSummary, exportMetricsToFile } from '../monitoring/summary';
 
 const logger = createChildLogger('pipeline');
 
@@ -26,7 +28,7 @@ const logger = createChildLogger('pipeline');
  */
 async function runPipeline() {
   const startTime = Date.now();
-  
+
   try {
     logger.info('='.repeat(60));
     logger.info('Starting USDC Transfer Events Pipeline');
@@ -63,7 +65,11 @@ async function runPipeline() {
     while (totalEvents < targetEvents && currentBlockNum < currentBlock) {
       const endBlock = currentBlockNum + batchSize;
       const rangeEnd = endBlock > currentBlock ? currentBlock : endBlock;
-      
+
+      // Update metrics
+      currentBlockNumber.set(Number(currentBlockNum));
+      pipelineProgress.set(totalEvents / targetEvents);
+
       logger.info({
         fromBlock: currentBlockNum.toString(),
         toBlock: rangeEnd.toString(),
@@ -97,8 +103,11 @@ async function runPipeline() {
       
       currentBlockNum = rangeEnd + 1n;
 
-      // Delay to respect rate limits (Infura free tier: 500 credits/sec)
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Track blocks processed
+      blocksProcessed.inc(Number(rangeEnd - (currentBlockNum - batchSize - 1n)));
+
+      // BALANCED MODE: Moderate delay
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
     
     logger.info({ totalEvents }, 'Event collection completed');
@@ -123,7 +132,15 @@ async function runPipeline() {
       outputFile: outputPath,
     }, 'Summary');
     logger.info('='.repeat(60));
-    
+
+    // Step 5: Display and export metrics
+    logger.info('Step 5: Generating metrics summary...');
+    await logMetricsSummary();
+
+    const metricsPath = path.join(process.cwd(), 'output', 'metrics.json');
+    await exportMetricsToFile(metricsPath);
+    logger.info({ metricsFile: metricsPath }, 'Metrics exported');
+
   } catch (error) {
     logger.error({ error }, 'Pipeline failed');
     throw error;

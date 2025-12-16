@@ -3,6 +3,7 @@ import { getClient, getBlock, getTransactionReceipt } from './client';
 import { config } from '../config';
 import { withRetry } from '../utils/retry';
 import { createChildLogger } from '../utils/logger';
+import { rpcLatency, timeOperation, eventsCollected } from '../monitoring/metrics';
 
 const logger = createChildLogger('events');
 
@@ -40,46 +41,57 @@ export async function fetchTransferEvents(
   targetAddress: Address,
   contractAddress: Address
 ): Promise<Log[]> {
-  const client = getClient();
-  
-  // We need to make two queries: one for 'from' and one for 'to'
-  // eth_getLogs with OR on indexed params requires separate calls
-  
-  const [logsFrom, logsTo] = await Promise.all([
-    // Events where target is sender
-    withRetry(() => client.getLogs({
-      address: contractAddress,
-      event: TRANSFER_EVENT,
-      args: { from: targetAddress },
-      fromBlock,
-      toBlock,
-    }), {
-      maxRetries: config.collection.maxRetries,
-      initialDelayMs: config.collection.initialRetryDelayMs,
-      maxDelayMs: config.collection.maxRetryDelayMs,
-    }),
-    // Events where target is recipient
-    withRetry(() => client.getLogs({
-      address: contractAddress,
-      event: TRANSFER_EVENT,
-      args: { to: targetAddress },
-      fromBlock,
-      toBlock,
-    }), {
-      maxRetries: config.collection.maxRetries,
-      initialDelayMs: config.collection.initialRetryDelayMs,
-      maxDelayMs: config.collection.maxRetryDelayMs,
-    }),
-  ]);
-  
-  // Combine and deduplicate (in case of self-transfers)
-  const logsMap = new Map<string, Log>();
-  [...logsFrom, ...logsTo].forEach(log => {
-    const key = `${log.transactionHash}-${log.logIndex}`;
-    logsMap.set(key, log);
-  });
-  
-  return Array.from(logsMap.values());
+  return timeOperation(
+    rpcLatency,
+    { method: 'eth_getLogs', status: 'success' },
+    async () => {
+      const client = getClient();
+
+      // We need to make two queries: one for 'from' and one for 'to'
+      // eth_getLogs with OR on indexed params requires separate calls
+
+      const [logsFrom, logsTo] = await Promise.all([
+        // Events where target is sender
+        withRetry(() => client.getLogs({
+          address: contractAddress,
+          event: TRANSFER_EVENT,
+          args: { from: targetAddress },
+          fromBlock,
+          toBlock,
+        }), {
+          maxRetries: config.collection.maxRetries,
+          initialDelayMs: config.collection.initialRetryDelayMs,
+          maxDelayMs: config.collection.maxRetryDelayMs,
+        }),
+        // Events where target is recipient
+        withRetry(() => client.getLogs({
+          address: contractAddress,
+          event: TRANSFER_EVENT,
+          args: { to: targetAddress },
+          fromBlock,
+          toBlock,
+        }), {
+          maxRetries: config.collection.maxRetries,
+          initialDelayMs: config.collection.initialRetryDelayMs,
+          maxDelayMs: config.collection.maxRetryDelayMs,
+        }),
+      ]);
+
+      // Combine and deduplicate (in case of self-transfers)
+      const logsMap = new Map<string, Log>();
+      [...logsFrom, ...logsTo].forEach(log => {
+        const key = `${log.transactionHash}-${log.logIndex}`;
+        logsMap.set(key, log);
+      });
+
+      const logs = Array.from(logsMap.values());
+
+      // Track events collected
+      eventsCollected.inc(logs.length);
+
+      return logs;
+    }
+  );
 }
 
 /**

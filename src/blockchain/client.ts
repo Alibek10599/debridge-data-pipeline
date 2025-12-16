@@ -3,6 +3,7 @@ import { mainnet } from 'viem/chains';
 import { config } from '../config';
 import { createChildLogger } from '../utils/logger';
 import { withRetry } from '../utils/retry';
+import { rpcLatency, timeOperation } from '../monitoring/metrics';
 
 const logger = createChildLogger('blockchain-client');
 
@@ -30,11 +31,15 @@ export function getClient(): PublicClient {
  */
 export async function getCurrentBlockNumber(): Promise<bigint> {
   const client = getClient();
-  return withRetry(() => client.getBlockNumber(), {
-    maxRetries: 5,
-    initialDelayMs: 2000,
-    maxDelayMs: 10000,
-  });
+  return timeOperation(
+    rpcLatency,
+    { method: 'eth_blockNumber', status: 'success' },
+    () => withRetry(() => client.getBlockNumber(), {
+      maxRetries: 5,
+      initialDelayMs: 2000,
+      maxDelayMs: 10000,
+    })
+  );
 }
 
 /**
@@ -42,38 +47,48 @@ export async function getCurrentBlockNumber(): Promise<bigint> {
  */
 export async function getBlock(blockNumber: bigint): Promise<Block> {
   const client = getClient();
-  return withRetry(() => client.getBlock({ blockNumber }), {
-    maxRetries: 3,
-    initialDelayMs: 1000,
-    maxDelayMs: 5000,
-  });
+  return timeOperation(
+    rpcLatency,
+    { method: 'eth_getBlockByNumber', status: 'success' },
+    () => withRetry(() => client.getBlock({ blockNumber }), {
+      maxRetries: 3,
+      initialDelayMs: 1000,
+      maxDelayMs: 5000,
+    })
+  );
 }
 
 /**
  * Get multiple blocks efficiently
  */
 export async function getBlocks(blockNumbers: bigint[]): Promise<Map<bigint, Block>> {
-  const client = getClient();
-  const blocks = new Map<bigint, Block>();
+  return timeOperation(
+    rpcLatency,
+    { method: 'eth_getBlockByNumber_batch', status: 'success' },
+    async () => {
+      const client = getClient();
+      const blocks = new Map<bigint, Block>();
 
-  // Batch requests with delay to avoid rate limits
-  const batchSize = 5; // Reduced batch size for rate limit compliance
-  for (let i = 0; i < blockNumbers.length; i += batchSize) {
-    const batch = blockNumbers.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(num => client.getBlock({ blockNumber: num }))
-    );
-    results.forEach((block, idx) => {
-      blocks.set(batch[idx], block);
-    });
+      // BALANCED MODE: Moderate batching for stability
+      const batchSize = 10; // Balanced for speed and safety
+      for (let i = 0; i < blockNumbers.length; i += batchSize) {
+        const batch = blockNumbers.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(num => client.getBlock({ blockNumber: num }))
+        );
+        results.forEach((block, idx) => {
+          blocks.set(batch[idx], block);
+        });
 
-    // Add delay between batches to respect rate limits
-    if (i + batchSize < blockNumbers.length) {
-      await new Promise(resolve => setTimeout(resolve, 300));
+        // Balanced delay for stability
+        if (i + batchSize < blockNumbers.length) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
+
+      return blocks;
     }
-  }
-
-  return blocks;
+  );
 }
 
 /**
@@ -81,31 +96,41 @@ export async function getBlocks(blockNumbers: bigint[]): Promise<Map<bigint, Blo
  */
 export async function getTransactionReceipt(txHash: `0x${string}`) {
   const client = getClient();
-  return client.getTransactionReceipt({ hash: txHash });
+  return timeOperation(
+    rpcLatency,
+    { method: 'eth_getTransactionReceipt', status: 'success' },
+    () => client.getTransactionReceipt({ hash: txHash })
+  );
 }
 
 /**
  * Get multiple transaction receipts
  */
 export async function getTransactionReceipts(txHashes: `0x${string}`[]) {
-  const client = getClient();
+  return timeOperation(
+    rpcLatency,
+    { method: 'eth_getTransactionReceipt_batch', status: 'success' },
+    async () => {
+      const client = getClient();
 
-  // Batch with rate limit compliance
-  const batchSize = 10; // Reduced batch size
-  const receipts = [];
+      // BALANCED MODE: Moderate receipt fetching
+      const batchSize = 25; // Balanced for speed and safety
+      const receipts = [];
 
-  for (let i = 0; i < txHashes.length; i += batchSize) {
-    const batch = txHashes.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(hash => client.getTransactionReceipt({ hash }))
-    );
-    receipts.push(...results);
+      for (let i = 0; i < txHashes.length; i += batchSize) {
+        const batch = txHashes.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(hash => client.getTransactionReceipt({ hash }))
+        );
+        receipts.push(...results);
 
-    // Add delay between batches to respect rate limits
-    if (i + batchSize < txHashes.length) {
-      await new Promise(resolve => setTimeout(resolve, 300));
+        // Balanced delay
+        if (i + batchSize < txHashes.length) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
+
+      return receipts;
     }
-  }
-
-  return receipts;
+  );
 }

@@ -2,12 +2,17 @@ import { Worker, NativeConnection } from '@temporalio/worker';
 import * as activities from './activities';
 import { config } from '../config';
 import { createChildLogger } from '../utils/logger';
+import { createMetricsServer } from '../monitoring/server';
 
 const logger = createChildLogger('worker');
 
 async function run() {
   logger.info({ address: config.temporal.address }, 'Starting Temporal worker');
-  
+
+  // Start metrics server for long-running worker
+  const metricsServer = createMetricsServer();
+  logger.info('Metrics server started for worker');
+
   // Connect to Temporal server
   const connection = await NativeConnection.connect({
     address: config.temporal.address,
@@ -30,6 +35,9 @@ async function run() {
   const shutdown = async () => {
     logger.info('Shutting down worker...');
     await worker.shutdown();
+    metricsServer.close(() => {
+      logger.info('Metrics server closed');
+    });
     process.exit(0);
   };
   

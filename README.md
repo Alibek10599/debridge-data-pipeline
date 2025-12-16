@@ -47,8 +47,8 @@ This pipeline collects and analyzes USDC transfer events for a specific address,
 - Node.js >= 18.0.0
 - Docker and Docker Compose (for containerized deployment)
 - Ethereum RPC endpoint:
-  - **Recommended**: [Infura](https://infura.io/) (free tier: no block range limits)
-  - Alternative: Alchemy, QuickNode (note: Alchemy free tier has 10 block range limit)
+  - **Recommended**: [PublicNode](https://ethereum.publicnode.com) (free, no signup required)
+  - Alternative: Infura, Alchemy, QuickNode (may require API keys or have stricter rate limits)
 
 ## Quick Start
 
@@ -68,15 +68,24 @@ cp .env.example .env
 
 Edit `.env` with your configuration:
 
-**For Infura (Recommended):**
+**For PublicNode (Recommended - No API key needed):**
 ```env
-ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_PROJECT_ID
+ETH_RPC_URL=https://ethereum.publicnode.com
+BLOCK_BATCH_SIZE=2000
 ```
 
-**For Alchemy (requires paid plan or set BLOCK_BATCH_SIZE=10):**
+**Alternative Options:**
+
+*Infura (requires free account):*
+```env
+ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_PROJECT_ID
+BLOCK_BATCH_SIZE=2000
+```
+
+*Alchemy (free tier very limited):*
 ```env
 ETH_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
-BLOCK_BATCH_SIZE=10  # Required for Alchemy free tier
+BLOCK_BATCH_SIZE=10  # Free tier requires small batches
 ```
 
 ### 3. Run with Docker (Recommended)
@@ -244,7 +253,68 @@ debridge-data-pipeline/
 
 ## Monitoring
 
+### Temporal UI
+
 Access Temporal UI at http://localhost:8080 to monitor workflow execution.
+
+### Prometheus Metrics
+
+The project provides two monitoring approaches depending on execution mode:
+
+#### Standalone Pipeline (Short-lived)
+
+When running `npm run pipeline`, metrics are **collected and displayed at completion**:
+
+```bash
+npm run pipeline
+
+# At end of pipeline run:
+# 📊 METRICS SUMMARY
+# ==================
+# 🌐 RPC Calls: 150 total, 245ms avg latency
+# 📦 Events: 5,072 collected
+# ⛓️  Blocks: 581,888 processed
+```
+
+**Output Files:**
+- `output/analysis_report.json` - Analysis results (MA7, gas costs, etc.)
+- `output/metrics.json` - Prometheus metrics summary + raw data
+
+**No live metrics server** - pipeline runs for ~3 minutes and exits with summary.
+
+#### Temporal Worker (Long-running)
+
+When running `npm run dev:worker`, metrics are **exposed via HTTP endpoint**:
+
+**Metrics Endpoints:**
+- `http://localhost:9091/metrics` - Prometheus scrape endpoint
+- `http://localhost:9091/health` - Health check JSON
+
+**Available Metrics:**
+- `debridge_rpc_request_duration_seconds` - RPC request latency by method
+- `debridge_rate_limit_hits_total` - Total rate limit errors encountered
+- `debridge_retries_total` - Total retry attempts by reason
+- `debridge_events_collected_total` - Total events collected
+- `debridge_blocks_processed_total` - Total blocks processed
+- `debridge_db_operations_total` - Database operations by type
+- `debridge_pipeline_progress` - Current pipeline progress (0-1)
+- `debridge_current_block_number` - Current block being processed
+- Plus default Node.js metrics (CPU, memory, event loop lag)
+
+**Prometheus Scrape Config:**
+```yaml
+scrape_configs:
+  - job_name: 'debridge-worker'
+    static_configs:
+      - targets: ['localhost:9091']
+    scrape_interval: 15s
+```
+
+**Standalone Metrics Server** (for testing):
+```bash
+npm run metrics
+# Exposes metrics at http://localhost:9090/metrics
+```
 
 ## Testing
 
@@ -256,32 +326,38 @@ npm test           # Unit tests
 
 ## Troubleshooting
 
-### Block Range Errors
+### RPC Provider Issues
+
+**PublicNode Rate Limits**
+If you encounter rate limit errors with PublicNode:
+- Reduce `BLOCK_BATCH_SIZE` from 2000 to 1000
+- Increase delays in `src/commands/pipeline.ts` (e.g., 200ms → 300ms)
+- Try alternative public endpoints: `https://eth.llamarpc.com` or `https://1rpc.io/eth`
 
 **Alchemy Error: "10 block range limit"**
 ```
 Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range
 ```
-- **Solution 1 (Recommended)**: Switch to Infura (no block range limit on free tier)
-- **Solution 2**: Set `BLOCK_BATCH_SIZE=10` in `.env` (slower collection)
+- **Solution 1 (Recommended)**: Switch to PublicNode (no API key, no block range limit)
+- **Solution 2**: Set `BLOCK_BATCH_SIZE=10` in `.env` (very slow: ~25 hours for 5K events)
 - **Solution 3**: Upgrade to Alchemy paid plan
 
 **Infura Error: "query returned more than 10000 results"**
 ```
 query returned more than 10000 results. Try with this block range [...]
 ```
-- Reduce `BLOCK_BATCH_SIZE` to a smaller value (e.g., 1000 or 500)
+- Reduce `BLOCK_BATCH_SIZE` to 1000 or 500
 - This error is rare for address-specific queries
 
 ### Rate Limit Errors
-- Increase delays between batches in `src/commands/pipeline.ts:101`
-- Check your RPC provider's rate limit tier
-- Consider upgrading to a paid plan
+- **Balanced Mode Settings**: BLOCK_BATCH_SIZE=2000, delays=150-200ms
+- **Conservative Mode**: BLOCK_BATCH_SIZE=1000, delays=300ms
+- Check delays in `src/blockchain/client.ts` and `src/commands/pipeline.ts`
 
 ### Connection Timeout
-- Check RPC endpoint health
-- Increase timeout in `src/blockchain/client.ts:20`
-- Try a different RPC provider
+- Check RPC endpoint health: `curl -X POST [RPC_URL] -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`
+- Increase timeout in `src/blockchain/client.ts:20` (default: 30000ms)
+- Try alternative RPC providers (PublicNode, LlamaRPC, 1RPC)
 
 ### Missing Events
 - Verify target address has USDC activity on Etherscan

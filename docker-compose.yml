@@ -88,6 +88,8 @@ services:
       dockerfile: Dockerfile
     container_name: debridge-worker
     command: ["node", "dist/temporal/worker.js"]
+    ports:
+      - "9091:9090"  # Metrics endpoint (mapped to different host port)
     environment:
       - ETH_RPC_URL=${ETH_RPC_URL}
       - TARGET_ADDRESS=0xef4fb24ad0916217251f553c0596f8edc630eb66
@@ -98,6 +100,7 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
       - MIN_EVENTS=5000
       - LOG_LEVEL=info
+      - METRICS_PORT=9090
     depends_on:
       clickhouse:
         condition: service_healthy

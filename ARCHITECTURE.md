@@ -23,7 +23,7 @@ This document describes the key architectural decisions for the deBridge USDC Tr
   ┌──────────┐              ┌──────────────┐          ┌──────────────┐
   │   RPC    │─────────────▶│   Temporal   │─────────▶│  ClickHouse  │
   │ Provider │  Transfer    │   Workflow   │  Batch   │   (Time-    │
-  │ (Alchemy)│   Events     │   Engine     │  Insert  │   Series)   │
+  │(PublicNode)│  Events    │   Engine     │  Insert  │   Series)   │
   └──────────┘              └──────────────┘          └──────────────┘
         │                          │                         │
         │  eth_getTransactionReceipt                         │
@@ -155,10 +155,11 @@ Features:
 
 ### 2. Rate Limit Handling
 
-- Batch processing with configurable size
-- Delays between batches
-- Automatic retry on 429 responses
-- Adaptive backoff based on error frequency
+- **Balanced Mode Configuration**: 2000 blocks per batch, 150-200ms delays
+- Batch processing with delays between requests
+- Automatic retry on 429 responses with exponential backoff
+- RPC-specific error detection (PublicNode, Infura, Alchemy)
+- Adaptive rate limiting based on provider capabilities
 
 ### 3. Idempotency
 
@@ -178,9 +179,13 @@ Features:
 
 ### Block Range Optimization
 
-- Configurable batch size (default: 2000 blocks)
-- Parallel processing of `from` and `to` queries
-- Adaptive ranges based on event density
+- **Configurable batch size** (default: 2000 blocks for PublicNode)
+- **Parallel processing** of `from` and `to` queries
+- **Adaptive batching**:
+  - Balanced mode: 2000 blocks (PublicNode, Infura)
+  - Conservative mode: 1000 blocks (rate-limited scenarios)
+  - Alchemy free tier: 10 blocks (strict limit)
+- **Smart delays**: 150-200ms between batches to prevent rate limiting
 
 ### Database Optimization
 
@@ -199,6 +204,37 @@ Features:
 
 ## Monitoring & Observability
 
+### Prometheus Metrics
+
+**Two Monitoring Modes:**
+
+#### 1. Standalone Pipeline (Batch Mode)
+- **No live HTTP server** - metrics collected in memory
+- **Summary display** - metrics logged to console at completion
+- **File export** - metrics saved to `output/metrics.json`
+- **Use case**: Short-lived data collection (~3 minutes)
+- **Output format**: Human-readable summary + Prometheus text format
+
+#### 2. Temporal Worker (Service Mode)
+- **Live HTTP server** - metrics exposed via `/metrics` endpoint (port 9091)
+- **Prometheus scraping** - continuous metrics collection
+- **Use case**: Long-running workflow processing
+- **Endpoints**:
+  - `/metrics` - Prometheus scrape endpoint
+  - `/health` - Health check JSON response
+
+**Tracked Metrics:**
+- **RPC Latency**: Histogram of request durations by method (eth_getLogs, eth_getBlockByNumber, etc.)
+- **Rate Limit Hits**: Counter for rate limit errors with provider labels
+- **Retry Attempts**: Counter with reason classification (rate_limit, network_error, etc.)
+- **Progress Tracking**:
+  - Events collected counter
+  - Blocks processed counter
+  - Pipeline progress gauge (0-1)
+  - Current block number gauge
+- **Database Operations**: Counters and latency histograms
+- **System Metrics**: Default Node.js metrics (CPU, memory, event loop lag)
+
 ### Temporal UI
 - Workflow execution status
 - Activity progress via heartbeats
@@ -213,6 +249,7 @@ Features:
 - ClickHouse ping endpoint
 - RPC connectivity validation
 - Database schema verification
+- Combined health endpoint for Prometheus monitoring
 
 ---
 
@@ -237,16 +274,36 @@ Features:
 
 ## Security Considerations
 
-- No sensitive data stored (only transaction metadata)
-- RPC URL passed via environment variables
+- No sensitive data stored (only public transaction metadata)
+- RPC URL configured via environment variables
+- **PublicNode**: No API keys required (public endpoint)
+- **Alternative providers**: API keys stored in `.env` (git-ignored)
 - Non-root container execution
 - Network isolation via Docker networks
 
 ---
 
+## Performance Results
+
+**Current Setup (PublicNode + Balanced Mode):**
+- **Collection Speed**: 5,072 events in ~3 minutes
+- **Batch Size**: 2000 blocks
+- **Success Rate**: 100% (no rate limit failures)
+- **Block Range**: 18,000,000 → 18,581,888 (581,888 blocks scanned)
+- **Time Period**: August 2023 → January 2024 (4+ months)
+
+**Mode Comparison:**
+| Mode | Batch Size | Delays | Speed | Risk |
+|------|------------|--------|-------|------|
+| Conservative | 500 | 500ms | Slow (~25 hours) | Very Low |
+| Balanced | 2000 | 150-200ms | Fast (~3 mins) | Low |
+| Aggressive | 5000 | 100ms | Failed | High |
+
 ## Future Enhancements
 
-1. **Prometheus Metrics**: Export RPC latency, retry counts, throughput
-2. **ETH/USDC Conversion**: Integration with price feed APIs
-3. **Real-time Processing**: WebSocket subscription for new events
-4. **Multi-chain Support**: Abstract chain-specific logic for other networks
+1. **ETH/USDC Conversion**: Integration with price feed APIs (e.g., CoinGecko)
+2. **Real-time Processing**: WebSocket subscription for new events
+3. **Multi-chain Support**: Abstract chain-specific logic for other networks
+4. **RPC Load Balancing**: Rotate between multiple public endpoints for better reliability
+5. **Grafana Dashboards**: Pre-built visualization dashboards for Prometheus metrics
+6. **Alerting**: Prometheus AlertManager rules for rate limits, failures, and latency spikes
