@@ -9,14 +9,23 @@ async function main() {
     usdcContract: config.target.usdcContract,
     minEvents: config.target.minEvents,
   }, 'deBridge Data Pipeline initialized');
-  
+
   logger.info(`
 Usage:
-  npm run pipeline     - Run standalone pipeline (no Temporal)
-  npm run dev:worker   - Start Temporal worker
-  npm run collect      - Start collection via Temporal
-  npm run export       - Export analysis report to JSON
-  
+  docker compose up -d              - Start all services
+  docker compose up starter         - Trigger data collection workflow
+  docker compose run starter \\
+    node dist/commands/export-report.js  - Export analysis report
+
+Dashboard:
+  Grafana: http://localhost:3000
+  Prometheus: http://localhost:9092
+  Temporal UI: http://localhost:8080
+
+Output:
+  ./output/analysis_report.json     - Analysis report
+  ./output/dashboard.html           - Interactive dashboard
+
 For more information, see README.md
   `);
 }

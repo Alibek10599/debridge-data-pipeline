@@ -53,7 +53,7 @@ export async function collectEventsWorkflow(input: CollectEventsInput): Promise<
   const { targetEvents, blockBatchSize } = input;
   
   let stopRequested = false;
-  let progress: CollectionProgress = {
+  const progress: CollectionProgress = {
     eventsCollected: 0,
     blocksProcessed: 0,
     currentBlock: '0',

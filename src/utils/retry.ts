@@ -16,10 +16,6 @@ const DEFAULT_OPTIONS: RetryOptions = {
   maxDelayMs: 30000,
 };
 
-/**
- * Calculate delay with exponential backoff and jitter
- * Uses "full jitter" strategy for better distributed retry patterns
- */
 function calculateDelay(attempt: number, options: RetryOptions): number {
   const exponentialDelay = options.initialDelayMs * Math.pow(2, attempt);
   const cappedDelay = Math.min(exponentialDelay, options.maxDelayMs);
@@ -27,9 +23,7 @@ function calculateDelay(attempt: number, options: RetryOptions): number {
   return Math.random() * cappedDelay;
 }
 
-/**
- * Check if error is retryable (rate limits, network errors, etc.)
- */
+
 function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
@@ -69,9 +63,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Execute function with exponential backoff retry logic
- */
+
 export async function withRetry<T>(
   fn: () => Promise<T>,
   options: Partial<RetryOptions> = {}
@@ -124,9 +116,3 @@ export async function withRetry<T>(
   throw lastError;
 }
 
-/**
- * Create a retry wrapper with pre-configured options
- */
-export function createRetryWrapper(options: Partial<RetryOptions>) {
-  return <T>(fn: () => Promise<T>) => withRetry(fn, options);
-}
