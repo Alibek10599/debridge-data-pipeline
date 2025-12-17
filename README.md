@@ -304,21 +304,21 @@ Returns JSON with service status:
   "network": "ethereum-mainnet",
   "token": "USDC",
   "summary": {
-    "events_collected": 7050,
-    "blocks_scanned": [23815651, 23863660],
-    "period_utc": ["2025-11-17", "2025-11-23"]
+    "events_collected": 7108,
+    "blocks_scanned": [23817616, 23865589],
+    "period_utc": ["2025-11-17", "2025-11-24"]
   },
   "daily_gas_cost": [
-    { "date": "2025-11-17", "gas_cost_wei": "302772587712393627", "gas_cost_eth": 0.3027725877123936 },
-    { "date": "2025-11-18", "gas_cost_wei": "298914517281505615", "gas_cost_eth": 0.2989145172815056 }
+    { "date": "2025-11-17", "gas_cost_wei": "277105317864334090", "gas_cost_eth": 0.277105317864334 },
+    { "date": "2025-11-18", "gas_cost_wei": "298914517281505615", "gas_cost_eth": 0.298914517281506 }
   ],
   "ma7_effective_gas_price": [
-    { "date": "2025-11-17", "ma7_wei": "879729939", "ma7_gwei": 0.8797299399211428 },
-    { "date": "2025-11-18", "ma7_wei": "784351133", "ma7_gwei": 0.7843511330545732 }
+    { "date": "2025-11-17", "ma7_wei": "1030437158", "ma7_gwei": 1.030437158 },
+    { "date": "2025-11-18", "ma7_wei": "859704742", "ma7_gwei": 0.859704742 }
   ],
   "cumulative_gas_cost_eth": [
-    { "date": "2025-11-17", "cum_eth": 0.3027725877123936 },
-    { "date": "2025-11-18", "cum_eth": 0.6016871049938992 }
+    { "date": "2025-11-17", "cum_eth": 0.277105317864334 },
+    { "date": "2025-11-18", "cum_eth": 0.576019835145840 }
   ]
 }
 ```

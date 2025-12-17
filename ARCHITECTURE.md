@@ -283,11 +283,11 @@ Features:
 ## Performance Results
 
 **Current Setup (PublicNode + Balanced Mode):**
-- **Collection Speed**: 7,050 events in ~3 minutes
+- **Collection Speed**: 7,108 events in ~8 minutes
 - **Batch Size**: 2000 blocks
 - **Success Rate**: 100% (no rate limit failures)
-- **Block Range**: 23,815,651 → 23,863,660 (48,024 blocks scanned)
-- **Time Period**: November 17-23, 2025 (6 days of recent data)
+- **Block Range**: 23,817,616 → 23,865,589 (48,024 blocks scanned)
+- **Time Period**: November 17-24, 2025 (8 days of recent data)
 
 **Mode Comparison:**
 | Mode | Batch Size | Delays | Speed | Risk |
