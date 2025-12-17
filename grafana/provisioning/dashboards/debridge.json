@@ -1,11 +1,11 @@
 {
-  "dashboard": {
-    "title": "DeBridge Data Pipeline",
-    "tags": ["debridge", "blockchain", "temporal"],
-    "timezone": "browser",
-    "schemaVersion": 16,
-    "version": 0,
-    "refresh": "5s",
+  "title": "DeBridge Data Pipeline",
+  "tags": ["debridge", "blockchain", "temporal"],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 0,
+  "refresh": "5s",
+  "uid": "debridge-pipeline",
     "panels": [
       {
         "id": 1,
@@ -213,5 +213,4 @@
         }
       }
     ]
-  }
 }

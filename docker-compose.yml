@@ -93,15 +93,15 @@ services:
       - "9091:9090"  # Metrics endpoint (mapped to different host port)
     environment:
       - ETH_RPC_URL=${ETH_RPC_URL}
-      - TARGET_ADDRESS=0xef4fb24ad0916217251f553c0596f8edc630eb66
-      - USDC_CONTRACT=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=8123
-      - CLICKHOUSE_DATABASE=debridge
-      - TEMPORAL_ADDRESS=temporal:7233
-      - MIN_EVENTS=5000
-      - LOG_LEVEL=info
-      - METRICS_PORT=9090
+      - TARGET_ADDRESS=${TARGET_ADDRESS}
+      - USDC_CONTRACT=${USDC_CONTRACT}
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST}
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE}
+      - TEMPORAL_ADDRESS=${TEMPORAL_ADDRESS}
+      - MIN_EVENTS=${MIN_EVENTS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - METRICS_PORT=${METRICS_PORT}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -119,14 +119,14 @@ services:
     command: ["node", "dist/commands/start-workflow.js"]
     environment:
       - ETH_RPC_URL=${ETH_RPC_URL}
-      - TARGET_ADDRESS=0xef4fb24ad0916217251f553c0596f8edc630eb66
-      - USDC_CONTRACT=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=8123
-      - CLICKHOUSE_DATABASE=debridge
-      - TEMPORAL_ADDRESS=temporal:7233
-      - MIN_EVENTS=5000
-      - LOG_LEVEL=info
+      - TARGET_ADDRESS=${TARGET_ADDRESS}
+      - USDC_CONTRACT=${USDC_CONTRACT}
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST}
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE}
+      - TEMPORAL_ADDRESS=${TEMPORAL_ADDRESS}
+      - MIN_EVENTS=${MIN_EVENTS}
+      - LOG_LEVEL=${LOG_LEVEL}
     volumes:
       - ./output:/app/output
     depends_on:
@@ -147,10 +147,15 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"  # Keep only 7 days of data
+      - "--storage.tsdb.retention.size=1GB"  # Limit to 1GB storage
       - "--web.console.libraries=/etc/prometheus/console_libraries"
       - "--web.console.templates=/etc/prometheus/consoles"
+    tmpfs:
+      - /tmp:size=100M  # Temporary storage for query processing
     depends_on:
       - worker
+    restart: unless-stopped
 
   # Grafana - Metrics visualization
   grafana:
@@ -166,8 +171,12 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_INSTALL_PLUGINS=  # Disable plugin downloads to save space
+    tmpfs:
+      - /tmp:size=50M  # Temporary storage
     depends_on:
       - prometheus
+    restart: unless-stopped
 
 volumes:
   clickhouse-data:
