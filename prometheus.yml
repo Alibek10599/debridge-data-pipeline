@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'debridge-pipeline'
+
+scrape_configs:
+  # Worker metrics
+  - job_name: 'debridge-worker'
+    static_configs:
+      - targets: ['worker:9090']
+        labels:
+          service: 'worker'
+          environment: 'docker'

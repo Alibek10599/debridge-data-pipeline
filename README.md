@@ -4,7 +4,7 @@ A robust blockchain data collection and analysis pipeline for USDC transfer even
 
 ## Overview
 
-This pipeline collects and analyzes USDC transfer events for a specific address, calculating gas-related metrics including:
+This pipeline collects and analyzes **recent USDC transfer events (last 30 days)** for a specific address, calculating gas-related metrics including:
 - **7-day Moving Average (MA7)** of effective gas price
 - **Daily Total Gas Cost** aggregation
 - **Cumulative Gas Cost** over time
@@ -115,13 +115,38 @@ npm run start:workflow
 ```
 
 The workflow will:
-1. Collect 5,000+ USDC transfer events
+1. Collect 5,000+ USDC transfer events from the last 30 days
 2. Calculate gas metrics (MA7, daily totals, cumulative)
 3. Export analysis report to `./output/analysis_report.json`
 
 ## Monitoring the Pipeline
 
-### 1. Temporal Web UI
+### 1. 📊 Grafana Dashboard (Recommended for Reviewers!)
+
+**URL:** http://localhost:3000
+
+**Pre-configured dashboard** showing real-time metrics:
+- 📈 Events collected counter
+- 🚀 RPC request rates and latency percentiles (p50, p95, p99)
+- 💾 Memory usage (RSS, Heap)
+- ⚡ Event loop lag
+- 🔄 Rate limits and retry counts
+- 📦 Current block number
+
+**Quick Access:**
+- **Username:** `admin` / **Password:** `admin`
+- **Or browse anonymously** (viewer mode enabled)
+- Dashboard auto-loads on first visit - no setup required!
+
+### 2. Prometheus Metrics
+
+**Prometheus UI:** http://localhost:9092
+**Worker Metrics Endpoint:** http://localhost:9091/metrics
+**Health Check:** http://localhost:9091/health
+
+The worker exposes comprehensive Prometheus metrics:
+
+### 3. Temporal Web UI
 
 **URL:** http://localhost:8080
 
@@ -132,13 +157,6 @@ Monitor workflow execution in real-time:
 - Event logs and error details
 
 Navigate to: **Workflows** → Find your `collect-events-*` workflow
-
-### 2. Prometheus Metrics
-
-**Metrics Endpoint:** http://localhost:9091/metrics
-**Health Check:** http://localhost:9091/health
-
-The worker exposes comprehensive Prometheus metrics:
 
 #### Available Metrics
 
@@ -241,17 +259,17 @@ Returns JSON with service status:
   "token": "USDC",
   "summary": {
     "events_collected": 5000,
-    "blocks_scanned": [18000000, 19500000],
-    "period_utc": ["2024-01-15", "2024-06-20"]
+    "blocks_scanned": [21400000, 21616000],
+    "period_utc": ["2024-11-17", "2024-12-17"]
   },
   "daily_gas_cost": [
-    { "date": "2024-01-15", "gas_cost_wei": "123456789000000000", "gas_cost_eth": 0.123456789 }
+    { "date": "2024-11-17", "gas_cost_wei": "123456789000000000", "gas_cost_eth": 0.123456789 }
   ],
   "ma7_effective_gas_price": [
-    { "date": "2024-01-15", "ma7_wei": "25000000000", "ma7_gwei": 25.0 }
+    { "date": "2024-11-17", "ma7_wei": "25000000000", "ma7_gwei": 25.0 }
   ],
   "cumulative_gas_cost_eth": [
-    { "date": "2024-01-15", "cum_eth": 0.123456789 }
+    { "date": "2024-11-17", "cum_eth": 0.123456789 }
   ]
 }
 ```
