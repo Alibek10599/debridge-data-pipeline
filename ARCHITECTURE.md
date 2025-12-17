@@ -10,36 +10,41 @@ This document describes the key architectural decisions for the deBridge USDC Tr
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                              Data Flow                                   │
+│                   Temporal Workflow-Orchestrated Pipeline                │
 └─────────────────────────────────────────────────────────────────────────┘
 
-  Ethereum Mainnet          Processing Layer           Storage Layer
-  ────────────────          ────────────────           ─────────────
-        │                          │                         │
-        │    eth_getLogs           │                         │
-        │  ◄─────────────────────  │                         │
-        │                          │                         │
-        ▼                          ▼                         ▼
-  ┌──────────┐              ┌──────────────┐          ┌──────────────┐
-  │   RPC    │─────────────▶│   Temporal   │─────────▶│  ClickHouse  │
-  │ Provider │  Transfer    │   Workflow   │  Batch   │   (Time-    │
-  │(PublicNode)│  Events    │   Engine     │  Insert  │   Series)   │
-  └──────────┘              └──────────────┘          └──────────────┘
-        │                          │                         │
-        │  eth_getTransactionReceipt                         │
-        │  ◄───────────────────────│                         │
-        │                          │                         │
-        ▼                          ▼                         ▼
-  ┌──────────┐              ┌──────────────┐          ┌──────────────┐
-  │   Gas    │─────────────▶│  Enrichment  │         │   Analysis   │
-  │   Data   │              │   Activity   │         │   Queries    │
-  └──────────┘              └──────────────┘          └──────────────┘
-                                   │                         │
-                                   ▼                         ▼
-                           ┌──────────────┐          ┌──────────────┐
-                           │    JSON      │◀─────────│   Metrics    │
-                           │   Export     │          │  Calculator  │
-                           └──────────────┘          └──────────────┘
+┌─────────────┐        ┌──────────────┐        ┌─────────────┐
+│  Ethereum   │───────▶│   Temporal   │───────▶│ ClickHouse  │
+│  JSON-RPC   │  RPC   │   Workflow   │ Insert │  Database   │
+└─────────────┘        │   + Worker   │        └─────────────┘
+                       └──────────────┘              │
+                              │                      │
+                              │                      ▼
+                       ┌──────────────┐        ┌─────────────┐
+                       │  Prometheus  │◀───────│  Analysis   │
+                       │   Metrics    │ Query  │   Engine    │
+                       └──────────────┘        └─────────────┘
+                              │                      │
+                              ▼                      ▼
+                       ┌──────────────┐        ┌─────────────┐
+                       │   Grafana    │        │    JSON     │
+                       │  Dashboard   │        │   Export    │
+                       └──────────────┘        └─────────────┘
+                                                      │
+                                                      ▼
+                                               ┌─────────────┐
+                                               │ Interactive │
+                                               │  Dashboard  │
+                                               └─────────────┘
+
+Data Flow:
+1. Worker fetches USDC transfer events from Ethereum via JSON-RPC
+2. Temporal orchestrates workflow with retry/resume capabilities
+3. Events stored in ClickHouse with automatic deduplication
+4. Analysis engine calculates gas metrics (MA7, daily totals, cumulative)
+5. Prometheus scrapes worker metrics every 15s
+6. Grafana visualizes real-time pipeline performance
+7. Reports exported as JSON with interactive HTML dashboard
 ```
 
 ---
@@ -206,22 +211,17 @@ Features:
 
 ### Prometheus Metrics
 
-**Two Monitoring Modes:**
+**Worker Monitoring:**
 
-#### 1. Standalone Pipeline (Batch Mode)
-- **No live HTTP server** - metrics collected in memory
-- **Summary display** - metrics logged to console at completion
-- **File export** - metrics saved to `output/metrics.json`
-- **Use case**: Short-lived data collection (~3 minutes)
-- **Output format**: Human-readable summary + Prometheus text format
-
-#### 2. Temporal Worker (Service Mode)
 - **Live HTTP server** - metrics exposed via `/metrics` endpoint (port 9091)
-- **Prometheus scraping** - continuous metrics collection
-- **Use case**: Long-running workflow processing
+- **Prometheus scraping** - continuous metrics collection every 15s
+- **Grafana visualization** - pre-built dashboard with 8 panels
+- **Use case**: Real-time workflow monitoring and performance analysis
 - **Endpoints**:
-  - `/metrics` - Prometheus scrape endpoint
-  - `/health` - Health check JSON response
+  - `/metrics` - Prometheus scrape endpoint (port 9091)
+  - `/health` - Health check JSON response (port 9091)
+  - Prometheus UI - http://localhost:9092
+  - Grafana dashboard - http://localhost:3000
 
 **Tracked Metrics:**
 - **RPC Latency**: Histogram of request durations by method (eth_getLogs, eth_getBlockByNumber, etc.)
@@ -257,18 +257,15 @@ Features:
 
 ### 1. Docker Compose (Recommended)
 - Full stack deployment
-- Includes ClickHouse, Temporal, workers
-- Suitable for development and testing
+- Includes ClickHouse, Temporal, Prometheus, Grafana
+- Pre-configured monitoring and dashboards
+- Suitable for development, testing, and small-scale production
 
-### 2. Standalone Mode
-- Runs without Temporal
-- Simpler setup for local testing
-- Direct pipeline execution
-
-### 3. Production Deployment
+### 2. Production Deployment
 - Kubernetes-ready containers
 - Horizontal scaling via worker replicas
 - External ClickHouse cluster support
+- Prometheus/Grafana for observability
 
 ---
 
@@ -286,11 +283,11 @@ Features:
 ## Performance Results
 
 **Current Setup (PublicNode + Balanced Mode):**
-- **Collection Speed**: 5,072 events in ~3 minutes
+- **Collection Speed**: 7,050 events in ~3 minutes
 - **Batch Size**: 2000 blocks
 - **Success Rate**: 100% (no rate limit failures)
-- **Block Range**: 18,000,000 → 18,581,888 (581,888 blocks scanned)
-- **Time Period**: August 2023 → January 2024 (4+ months)
+- **Block Range**: 23,815,651 → 23,863,660 (48,024 blocks scanned)
+- **Time Period**: November 17-23, 2025 (6 days of recent data)
 
 **Mode Comparison:**
 | Mode | Batch Size | Delays | Speed | Risk |
@@ -299,11 +296,52 @@ Features:
 | Balanced | 2000 | 150-200ms | Fast (~3 mins) | Low |
 | Aggressive | 5000 | 100ms | Failed | High |
 
+---
+
+## Visualization & Deliverables
+
+### Analysis Report Export
+
+**Command:**
+```bash
+docker compose run --rm starter node dist/commands/export-report.js
+```
+
+**Output Location:** `./output/analysis_report.json`
+
+**Contents:**
+- Summary statistics (events collected, block range, time period)
+- Daily gas cost in ETH and wei
+- 7-day moving average of effective gas price (Gwei)
+- Cumulative gas cost over time
+
+### Interactive Dashboard
+
+**File:** `./output/dashboard.html`
+
+**Features:**
+- Self-contained HTML with embedded Chart.js
+- 3 interactive visualizations:
+  - Daily Gas Cost (bar chart)
+  - 7-Day Moving Average Gas Price (line chart)
+  - Cumulative Gas Cost (area chart)
+- Summary cards with key metrics
+- Professional responsive design
+- Works offline once loaded
+
+**Usage:**
+Open `./output/dashboard.html` in any web browser to view the visualizations.
+
+**Data Source:**
+Dashboard automatically loads data from `analysis_report.json` in the same directory.
+
+---
+
 ## Future Enhancements
 
-1. **ETH/USDC Conversion**: Integration with price feed APIs (e.g., CoinGecko)
-2. **Real-time Processing**: WebSocket subscription for new events
-3. **Multi-chain Support**: Abstract chain-specific logic for other networks
-4. **RPC Load Balancing**: Rotate between multiple public endpoints for better reliability
-5. **Grafana Dashboards**: Pre-built visualization dashboards for Prometheus metrics
-6. **Alerting**: Prometheus AlertManager rules for rate limits, failures, and latency spikes
+1. **ETH/USDC Conversion**: Integration with price feed APIs (e.g., CoinGecko) for USD-denominated costs
+2. **Real-time Processing**: WebSocket subscription for new events as they occur
+3. **Multi-chain Support**: Abstract chain-specific logic for Polygon, Arbitrum, and other EVM chains
+4. **RPC Load Balancing**: Rotate between multiple public endpoints for better reliability and failover
+5. **Advanced Alerting**: Prometheus AlertManager rules for rate limits, failures, and latency spikes
+6. **Historical Backfill**: Automated backfill workflows for missing historical data

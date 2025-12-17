@@ -2,7 +2,6 @@
   "name": "debridge-data-pipeline",
   "version": "1.0.0",
   "description": "Blockchain data collection and analysis pipeline for USDC transfers",
-  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start:worker": "node dist/temporal/worker.js",

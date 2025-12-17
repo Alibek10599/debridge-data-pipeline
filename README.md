@@ -2,6 +2,11 @@
 
 A robust blockchain data collection and analysis pipeline for USDC transfer events on Ethereum Mainnet, orchestrated with Temporal workflows.
 
+## 📚 Documentation
+
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed system architecture, design decisions, and technical specifications
+- **[README.md](./README.md)** - Quick start guide and usage instructions (you are here)
+
 ## Overview
 
 This pipeline collects and analyzes **recent USDC transfer events (last 30 days)** for a specific address, calculating gas-related metrics including:
@@ -115,9 +120,46 @@ npm run start:workflow
 ```
 
 The workflow will:
-1. Collect 5,000+ USDC transfer events from the last 30 days
+1. Collect 7,000+ USDC transfer events from the last 30 days
 2. Calculate gas metrics (MA7, daily totals, cumulative)
 3. Export analysis report to `./output/analysis_report.json`
+
+### 4. View Analysis Results
+
+After the workflow completes, you can access the analysis results in two ways:
+
+#### 📊 Interactive Dashboard (Recommended for Reviewers!)
+
+**Location:** `./output/dashboard.html`
+
+**How to view:**
+```bash
+# Option 1: Open directly in browser
+open output/dashboard.html
+
+# Option 2: Use a simple HTTP server
+cd output
+python3 -m http.server 8000
+# Then open http://localhost:8000/dashboard.html
+```
+
+**What you'll see:**
+- 📈 **Daily Gas Cost Chart** - Bar chart showing gas costs per day in ETH
+- 📉 **7-Day Moving Average** - Line chart of gas price trends in Gwei
+- 📊 **Cumulative Gas Cost** - Area chart showing total accumulated costs
+- 📋 **Summary Cards** - Events collected, blocks scanned, date range
+
+The dashboard is self-contained and works offline. All data is loaded from `analysis_report.json`.
+
+#### 📄 Raw JSON Report
+
+**Location:** `./output/analysis_report.json`
+
+```bash
+cat output/analysis_report.json | jq
+```
+
+Contains all calculated metrics in JSON format for programmatic access.
 
 ## Monitoring the Pipeline
 
@@ -252,27 +294,36 @@ Returns JSON with service status:
 
 ## Output Format
 
+**Location:** `./output/analysis_report.json`
+
+**Example output:**
+
 ```json
 {
   "address": "0xef4fb24ad0916217251f553c0596f8edc630eb66",
   "network": "ethereum-mainnet",
   "token": "USDC",
   "summary": {
-    "events_collected": 5000,
-    "blocks_scanned": [21400000, 21616000],
-    "period_utc": ["2024-11-17", "2024-12-17"]
+    "events_collected": 7050,
+    "blocks_scanned": [23815651, 23863660],
+    "period_utc": ["2025-11-17", "2025-11-23"]
   },
   "daily_gas_cost": [
-    { "date": "2024-11-17", "gas_cost_wei": "123456789000000000", "gas_cost_eth": 0.123456789 }
+    { "date": "2025-11-17", "gas_cost_wei": "302772587712393627", "gas_cost_eth": 0.3027725877123936 },
+    { "date": "2025-11-18", "gas_cost_wei": "298914517281505615", "gas_cost_eth": 0.2989145172815056 }
   ],
   "ma7_effective_gas_price": [
-    { "date": "2024-11-17", "ma7_wei": "25000000000", "ma7_gwei": 25.0 }
+    { "date": "2025-11-17", "ma7_wei": "879729939", "ma7_gwei": 0.8797299399211428 },
+    { "date": "2025-11-18", "ma7_wei": "784351133", "ma7_gwei": 0.7843511330545732 }
   ],
   "cumulative_gas_cost_eth": [
-    { "date": "2024-11-17", "cum_eth": 0.123456789 }
+    { "date": "2025-11-17", "cum_eth": 0.3027725877123936 },
+    { "date": "2025-11-18", "cum_eth": 0.6016871049938992 }
   ]
 }
 ```
+
+See `./output/dashboard.html` for interactive visualizations of this data.
 
 ## Configuration
 
@@ -281,11 +332,12 @@ Returns JSON with service status:
 | `ETH_RPC_URL` | Ethereum JSON-RPC endpoint | Required |
 | `TARGET_ADDRESS` | Address to filter transfers | `0xef4fb24ad0916217251f553c0596f8edc630eb66` |
 | `USDC_CONTRACT` | USDC token contract | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
-| `MIN_EVENTS` | Minimum events to collect | `5000` |
+| `MIN_EVENTS` | Minimum events to collect | `7000` |
 | `BLOCK_BATCH_SIZE` | Blocks per batch | `2000` |
-| `CLICKHOUSE_HOST` | ClickHouse hostname | `localhost` |
+| `CLICKHOUSE_HOST` | ClickHouse hostname | `clickhouse` |
 | `CLICKHOUSE_PORT` | ClickHouse HTTP port | `8123` |
-| `TEMPORAL_ADDRESS` | Temporal server address | `localhost:7233` |
+| `TEMPORAL_ADDRESS` | Temporal server address | `temporal:7233` |
+| `METRICS_PORT` | Prometheus metrics port | `9091` |
 
 ## Database Schema
 
