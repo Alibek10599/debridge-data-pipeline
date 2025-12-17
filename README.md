@@ -7,6 +7,20 @@ A robust blockchain data collection and analysis pipeline for USDC transfer even
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed system architecture, design decisions, and technical specifications
 - **[README.md](./README.md)** - Quick start guide and usage instructions (you are here)
 
+## 📊 Monitoring & Visualizations
+
+This pipeline includes comprehensive monitoring and visualization tools:
+
+| Tool | URL | Purpose |
+|------|-----|---------|
+| **📊 Grafana Dashboard** | http://localhost:3000 | Real-time metrics (8 panels, auto-provisioned) |
+| **📈 Prometheus UI** | http://localhost:9092 | Metric queries and time-series visualization |
+| **🌐 Temporal UI** | http://localhost:8080 | Workflow execution monitoring |
+| **📄 Interactive Dashboard** | `./output/dashboard.html` | Gas cost analysis (MA7, daily, cumulative) |
+| **💾 JSON Export** | `./output/analysis_report.json` | Complete analysis data |
+
+**All visualizations are included** - no additional setup required!
+
 ## Overview
 
 This pipeline collects and analyzes **recent USDC transfer events (last 30 days)** for a specific address, calculating gas-related metrics including:
@@ -174,19 +188,86 @@ Contains all calculated metrics in JSON format for programmatic access.
 - ⚡ Event loop lag
 - 🔄 Rate limits and retry counts
 - 📦 Current block number
+- 📊 Pipeline progress gauge (0-100%)
+- 📉 Database operation latency
 
 **Quick Access:**
 - **Username:** `admin` / **Password:** `admin`
 - **Or browse anonymously** (viewer mode enabled)
 - Dashboard auto-loads on first visit - no setup required!
 
-### 2. Prometheus Metrics
+**Dashboard Panels Overview:**
+
+The Grafana dashboard includes 8 real-time monitoring panels:
+
+1. **Events Collected** - Running total with color thresholds (green when target reached)
+2. **RPC Requests Rate** - Time series of requests per second to Ethereum RPC
+3. **Pipeline Progress** - Gauge showing completion percentage (0-100%)
+4. **RPC Latency Distribution** - Multi-line graph showing p50, p95, p99 latencies
+5. **Memory Usage** - RSS and Heap memory consumption over time
+6. **Event Loop Lag** - Node.js event loop performance metrics
+7. **Rate Limits & Retries** - Counters for rate limit hits and retry attempts
+8. **Current Block Number** - Latest block being processed
+
+**How to Access:**
+```bash
+# Start the pipeline
+docker compose up -d
+
+# Open Grafana in your browser
+open http://localhost:3000
+
+# Navigate to: Dashboards → DeBridge Pipeline
+# Or use anonymous access (no login required)
+```
+
+### 2. Prometheus Metrics & Queries
 
 **Prometheus UI:** http://localhost:9092
 **Worker Metrics Endpoint:** http://localhost:9091/metrics
 **Health Check:** http://localhost:9091/health
 
-The worker exposes comprehensive Prometheus metrics:
+The worker exposes comprehensive Prometheus metrics in real-time.
+
+**Quick Metric Visualization:**
+
+You can visualize metrics directly in Prometheus UI by navigating to http://localhost:9092/graph and trying these queries:
+
+```promql
+# Events collection rate (events per minute)
+rate(debridge_events_collected_total[1m]) * 60
+
+# Average RPC latency over 5 minutes
+rate(debridge_rpc_request_duration_seconds_sum[5m]) /
+rate(debridge_rpc_request_duration_seconds_count[5m])
+
+# Pipeline completion percentage
+debridge_pipeline_progress * 100
+
+# Memory usage in MB
+debridge_process_resident_memory_bytes / 1024 / 1024
+
+# P95 RPC latency by method
+histogram_quantile(0.95,
+  rate(debridge_rpc_request_duration_seconds_bucket[5m]))
+```
+
+**Sample Metrics Output:**
+
+```
+# HELP debridge_events_collected_total Total number of events collected
+debridge_events_collected_total 7108
+
+# HELP debridge_blocks_processed_total Total number of blocks processed
+debridge_blocks_processed_total 48024
+
+# HELP debridge_pipeline_progress Pipeline progress from 0 to 1
+debridge_pipeline_progress 1
+
+# HELP debridge_rpc_request_duration_seconds Duration of RPC requests
+debridge_rpc_request_duration_seconds_count{method="eth_getLogs"} 150
+debridge_rpc_request_duration_seconds_sum{method="eth_getLogs"} 450.123
+```
 
 ### 3. Temporal Web UI
 
@@ -290,6 +371,34 @@ Returns JSON with service status:
     "rpcCalls": 150
   }
 }
+```
+
+## 📤 Output Files & Deliverables
+
+All output files are generated in the `./output/` directory and are accessible on your host machine.
+
+### Output File Locations
+
+| File | Location | Description |
+|------|----------|-------------|
+| **JSON Report** | `./output/analysis_report.json` | Complete analysis data (2.8KB) |
+| **Dashboard** | `./output/dashboard.html` | Interactive visualizations (10KB) |
+
+**Absolute Path Example:**
+```
+/Users/alibekkhojabekov/Downloads/debridge-data-pipeline 2/output/analysis_report.json
+```
+
+**Quick Access:**
+```bash
+# View JSON report
+cat output/analysis_report.json | jq
+
+# Open interactive dashboard
+open output/dashboard.html
+
+# Copy to another location
+cp output/analysis_report.json ~/Desktop/
 ```
 
 ## Output Format

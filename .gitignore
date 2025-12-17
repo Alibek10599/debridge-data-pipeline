@@ -24,7 +24,6 @@ logs/
 coverage/
 
 # Output (keep the folder structure)
-output/*
 !output/.gitkeep
 
 # ClickHouse data
