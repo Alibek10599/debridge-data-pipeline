@@ -116,3 +116,6 @@ export async function withRetry<T>(
   throw lastError;
 }
 
+export function createRetryWrapper(options: Partial<RetryOptions>) {
+  return <T>(fn: () => Promise<T>) => withRetry(fn, options);
+}

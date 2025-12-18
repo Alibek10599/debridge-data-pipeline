@@ -110,4 +110,3 @@ export function resetMetrics(): void {
   logger.info('Metrics reset');
 }
 
-logger.info('Prometheus metrics initialized');
